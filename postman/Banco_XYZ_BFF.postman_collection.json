@@ -1,0 +1,508 @@
+{
+  "info": {
+    "name": "Banco XYZ - BFF (Web/Mobile/ATM)",
+    "description": "Coleccion para probar la arquitectura Backend for Frontend (BFF) del Banco XYZ.\n\nIMPORTANTE: los servicios usan HTTPS con certificado autofirmado. En Postman debes desactivar la verificacion SSL:\n  Settings -> General -> 'SSL certificate verification' -> OFF\n\nOrden sugerido:\n  1) Folder 'Batch' -> 'Procesar datos' (carga los CSV en MySQL).\n  2) Folder 'Auth' -> ejecutar los 3 login (guardan los tokens automaticamente).\n  3) Ejecutar las llamadas de Backend Core, Web, Mobile y ATM.\n\nCredenciales:\n  Web    -> web.admin    / WebPass123!\n  Mobile -> mobile.user  / MobilePass123!\n  ATM    -> atm.terminal / AtmPass123!",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "cuentaId", "value": "101" },
+    { "key": "web_token", "value": "" },
+    { "key": "mobile_token", "value": "" },
+    { "key": "atm_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 - Batch",
+      "item": [
+        {
+          "name": "Procesar datos (carga CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/batch/procesar",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "batch", "procesar"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('estado COMPLETED', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.estado).to.eql('COMPLETED');",
+                  "  pm.expect(b.escritos).to.be.greaterThan(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 - Auth (login por canal)",
+      "item": [
+        {
+          "name": "Login Web (guarda web_token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"web.admin\",\n  \"password\": \"WebPass123!\"\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8082/api/auth/login",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('tiene accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.test('canal WEB', () => pm.expect(json.channel).to.eql('WEB'));",
+                  "pm.collectionVariables.set('web_token', json.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Mobile (guarda mobile_token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"mobile.user\",\n  \"password\": \"MobilePass123!\"\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8083/api/auth/login",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8083",
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('tiene accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.test('canal MOBILE', () => pm.expect(json.channel).to.eql('MOBILE'));",
+                  "pm.collectionVariables.set('mobile_token', json.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login ATM (guarda atm_token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"atm.terminal\",\n  \"password\": \"AtmPass123!\"\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8084/api/auth/login",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8084",
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('tiene accessToken', () => pm.expect(json.accessToken).to.be.a('string'));",
+                  "pm.test('canal ATM', () => pm.expect(json.channel).to.eql('ATM'));",
+                  "pm.collectionVariables.set('atm_token', json.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 - Backend Core (Bearer atm_token)",
+      "description": "backend-core valida el JWT. Lecturas requieren token; el retiro requiere ROLE_ATM (por eso se usa atm_token).",
+      "item": [
+        {
+          "name": "Listar cuentas",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8081/api/cuentas",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "cuentas"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener cuenta",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8081/api/cuentas/{{cuentaId}}",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "cuentas", "{{cuentaId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('trae saldo', () => pm.expect(b).to.have.property('saldo'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transacciones de una cuenta",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8081/api/transacciones/cuenta/{{cuentaId}}",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "transacciones", "cuenta", "{{cuentaId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Movimientos (libro mayor)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8081/api/movimientos",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "movimientos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Realizar retiro (ROLE_ATM)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": 500\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8081/api/cuentas/{{cuentaId}}/retiros",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "cuentas", "{{cuentaId}}", "retiros"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('estado APROBADO', () => pm.expect(b.estado).to.eql('APROBADO'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 - BFF Web (Bearer web_token)",
+      "item": [
+        {
+          "name": "Listar cuentas (resumen completo)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{web_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8082/api/web/cuentas",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "web", "cuentas"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle de cuenta (movimientos + resumen)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{web_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8082/api/web/cuentas/{{cuentaId}}",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "web", "cuentas", "{{cuentaId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('trae movimientos y resumen', () => {",
+                  "  pm.expect(b).to.have.property('movimientos');",
+                  "  pm.expect(b).to.have.property('resumen');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 - BFF Mobile (Bearer mobile_token)",
+      "item": [
+        {
+          "name": "Listar cuentas (liviano)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{mobile_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8083/api/mobile/cuentas",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8083",
+              "path": ["api", "mobile", "cuentas"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle de cuenta (ultimos 5 movimientos)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{mobile_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8083/api/mobile/cuentas/{{cuentaId}}",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8083",
+              "path": ["api", "mobile", "cuentas", "{{cuentaId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('ultimosMovimientos <= 5', () => pm.expect(b.ultimosMovimientos.length).to.be.at.most(5));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 - BFF ATM (Bearer atm_token)",
+      "item": [
+        {
+          "name": "Consulta de saldo",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8084/api/atm/cuentas/{{cuentaId}}/saldo",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8084",
+              "path": ["api", "atm", "cuentas", "{{cuentaId}}", "saldo"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('solo cuentaId y saldo', () => pm.expect(Object.keys(b).sort()).to.eql(['cuentaId', 'saldo']));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Realizar retiro",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{atm_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": 500\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8084/api/atm/cuentas/{{cuentaId}}/retiros",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8084",
+              "path": ["api", "atm", "cuentas", "{{cuentaId}}", "retiros"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('estado APROBADO', () => pm.expect(b.estado).to.eql('APROBADO'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

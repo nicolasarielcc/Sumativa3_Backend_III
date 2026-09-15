@@ -1,0 +1,96 @@
+name: banco-xyz-bff
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: banco-xyz-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: banco_xyz
+      MYSQL_USER: banco_user
+      MYSQL_PASSWORD: banco_password
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - banco_xyz_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  banco-batch:
+    build:
+      context: .
+      dockerfile: banco-batch/Dockerfile
+    container_name: banco-bff-batch
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: banco_user
+      DB_PASSWORD: banco_password
+      BATCH_RUN_ON_STARTUP: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  backend-core:
+    build:
+      context: .
+      dockerfile: backend-core/Dockerfile
+    container_name: banco-bff-core
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: banco_user
+      DB_PASSWORD: banco_password
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  bff-web:
+    build:
+      context: .
+      dockerfile: bff-web/Dockerfile
+    container_name: banco-bff-web
+    environment:
+      BACKEND_CORE_URL: "https://backend-core:8081"
+    ports:
+      - "8082:8082"
+    depends_on:
+      backend-core:
+        condition: service_started
+
+  bff-mobile:
+    build:
+      context: .
+      dockerfile: bff-mobile/Dockerfile
+    container_name: banco-bff-mobile
+    environment:
+      BACKEND_CORE_URL: "https://backend-core:8081"
+    ports:
+      - "8083:8083"
+    depends_on:
+      backend-core:
+        condition: service_started
+
+  bff-atm:
+    build:
+      context: .
+      dockerfile: bff-atm/Dockerfile
+    container_name: banco-bff-atm
+    environment:
+      BACKEND_CORE_URL: "https://backend-core:8081"
+    ports:
+      - "8084:8084"
+    depends_on:
+      backend-core:
+        condition: service_started
+
+volumes:
+  banco_xyz_data:
