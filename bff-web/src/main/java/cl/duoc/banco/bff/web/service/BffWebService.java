@@ -18,20 +18,26 @@ import cl.duoc.banco.bff.web.dto.CuentaWebDetalleDTO;
 import cl.duoc.banco.bff.web.dto.CuentaWebResumenDTO;
 import cl.duoc.banco.bff.web.dto.ResumenWebDTO;
 import cl.duoc.banco.bff.web.dto.TransaccionWebDTO;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
- * Logica del canal Web: consume backend-core (con relay del token JWT) y
- * entrega datos completos mas un resumen calculado.
+ * Logica del canal Web: consume backend-core (con relay del token) y
+ * entrega datos completos mas un resumen calculado, con tolerancia a fallos.
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BffWebService {
 
     private static final Set<String> TIPOS_DEBITO = Set.of("retiro", "compra", "pago");
 
     private final RestClient coreRestClient;
 
+    @CircuitBreaker(name = "backendCore", fallbackMethod = "listarCuentasFallback")
+    @Retry(name = "backendCore")
     public List<CuentaWebResumenDTO> listarCuentas() {
         List<CuentaBackendDTO> cuentas = coreRestClient.get()
                 .uri("/api/cuentas")
@@ -44,6 +50,13 @@ public class BffWebService {
                 .toList();
     }
 
+    public List<CuentaWebResumenDTO> listarCuentasFallback(Throwable t) {
+        log.warn("Fallback listado de cuentas (web): {}", t.getMessage());
+        return List.of();
+    }
+
+    @CircuitBreaker(name = "backendCore", fallbackMethod = "obtenerDetalleFallback")
+    @Retry(name = "backendCore")
     public CuentaWebDetalleDTO obtenerDetalle(Long cuentaId) {
         CuentaBackendDTO cuenta = coreRestClient.get()
                 .uri("/api/cuentas/{id}", cuentaId)
@@ -67,6 +80,12 @@ public class BffWebService {
         return new CuentaWebDetalleDTO(
                 cuenta.cuentaId(), cuenta.nombre(), cuenta.saldo(), cuenta.edad(), cuenta.tipo(),
                 movimientos, resumen);
+    }
+
+    public CuentaWebDetalleDTO obtenerDetalleFallback(Long cuentaId, Throwable t) {
+        log.warn("Fallback detalle de cuenta {} (web): {}", cuentaId, t.getMessage());
+        return new CuentaWebDetalleDTO(cuentaId, "No disponible", null, null, null,
+                List.of(), new ResumenWebDTO(BigDecimal.ZERO, BigDecimal.ZERO, 0));
     }
 
     private ResumenWebDTO calcularResumen(List<TransaccionBackendDTO> transacciones) {

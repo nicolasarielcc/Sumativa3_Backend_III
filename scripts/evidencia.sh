@@ -61,4 +61,11 @@ curl -sk -o /dev/null -w "%{http_code}\n" https://localhost:8081/api/cuentas/101
   -X POST -H "Authorization: Bearer $ATM_TOKEN" -H 'Content-Type: application/json' -d '{"monto":100}'
 
 echo
+echo "=============================================="
+echo " 6) MENSAJERIA ASINCRONA (Kafka)"
+echo "=============================================="
+echo "-- Eventos de retiro consumidos por notificaciones-service:"
+curl -s http://localhost:8085/api/notificaciones | python3 -m json.tool
+
+echo
 echo "Evidencia generada correctamente."

@@ -19,3 +19,6 @@ target/
 Thumbs.db
 
 # El keystore se mantiene versionado para facilitar la ejecucion en desarrollo.
+
+# Windows Zone.Identifier (metadatos)
+*:Zone.Identifier

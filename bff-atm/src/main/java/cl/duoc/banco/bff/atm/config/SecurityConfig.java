@@ -3,22 +3,17 @@ package cl.duoc.banco.bff.atm.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 import cl.duoc.banco.bff.common.security.JwtAuthConverter;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Seguridad del canal ATM: login publico y endpoints /api/atm/** con ROLE_ATM.
+ * Seguridad del canal ATM (resource server OAuth 2.0):
+ * - Login publico en /api/auth/login.
+ * - Endpoints /api/atm/** requieren el rol ROLE_ATM.
  */
 @Configuration
 @RequiredArgsConstructor
@@ -38,24 +33,5 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter)));
         return http.build();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder encoder) {
-        var usuario = User.withUsername("atm.terminal")
-                .password(encoder.encode("AtmPass123!"))
-                .roles("ATM")
-                .build();
-        return new InMemoryUserDetailsManager(usuario);
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
     }
 }

@@ -41,6 +41,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Mensajeria asincrona (productor Kafka) -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>cl.duoc.banco.bff</groupId>
             <artifactId>banco-bff-common</artifactId>

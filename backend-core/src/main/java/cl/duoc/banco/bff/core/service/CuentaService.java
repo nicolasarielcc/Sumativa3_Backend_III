@@ -5,11 +5,14 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import cl.duoc.banco.bff.core.config.KafkaProducerConfig;
 import cl.duoc.banco.bff.core.dto.CuentaDTO;
+import cl.duoc.banco.bff.core.dto.RetiroEvent;
 import cl.duoc.banco.bff.core.dto.RetiroResultDTO;
 import cl.duoc.banco.bff.core.entity.Cuenta;
 import cl.duoc.banco.bff.core.entity.Transaccion;
@@ -26,6 +29,7 @@ public class CuentaService {
 
     private final CuentaRepository cuentaRepository;
     private final TransaccionRepository transaccionRepository;
+    private final KafkaTemplate<String, RetiroEvent> kafkaTemplate;
 
     public List<CuentaDTO> listar() {
         return cuentaRepository.findAll().stream().map(CuentaDTO::from).toList();
@@ -49,6 +53,8 @@ public class CuentaService {
         transaccionRepository.save(new Transaccion(
                 null, cuentaId, LocalDate.now(), "retiro", monto, "Retiro por cajero automatico"));
 
+        publicarEventoRetiro(cuentaId, monto);
+
         return new RetiroResultDTO(cuentaId, "APROBADO", monto, cuenta.getSaldo());
     }
 
@@ -56,5 +62,23 @@ public class CuentaService {
         return cuentaRepository.findById(cuentaId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "No existe la cuenta con id " + cuentaId));
+    }
+
+    /**
+     * Publica el evento de retiro en Kafka (de forma asincrona). Si el broker
+     * no esta disponible, la falla se registra sin interrumpir la operacion.
+     */
+    private void publicarEventoRetiro(Long cuentaId, BigDecimal monto) {
+        try {
+            RetiroEvent evento = new RetiroEvent(cuentaId, monto, "APROBADO", LocalDate.now().toString());
+            kafkaTemplate.send(KafkaProducerConfig.TOPIC, evento)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            System.err.println("No se pudo publicar el evento de retiro: " + ex.getMessage());
+                        }
+                    });
+        } catch (Exception e) {
+            System.err.println("Error al publicar evento de retiro: " + e.getMessage());
+        }
     }
 }

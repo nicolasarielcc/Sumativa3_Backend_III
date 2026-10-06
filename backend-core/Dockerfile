@@ -2,7 +2,7 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .
-RUN mvn -q -DskipTests clean package -pl backend-core -am
+RUN --mount=type=cache,target=/root/.m2/repository mvn -q -DskipTests clean package -pl backend-core -am
 
 # Etapa de ejecucion (JRE)
 FROM eclipse-temurin:21-jre

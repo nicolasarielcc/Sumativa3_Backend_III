@@ -1,7 +1,20 @@
-target/
-.git/
+# Control de versiones y artefactos de compilacion
+.git
+**/target
+*.class
+
+# Documentacion y evidencias (no requeridas en la imagen)
+**/*.md
+imgs
+postman
+scripts
+
+# Certificado raiz duplicado (cada servicio lleva el suyo en resources)
+keystore.p12
+
+# Otros
+*.7z
 *.log
-.idea/
-.vscode/
+.idea
+.vscode
 *.iml
-.DS_Store

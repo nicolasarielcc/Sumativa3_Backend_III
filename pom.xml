@@ -24,11 +24,13 @@
 
     <modules>
         <module>common</module>
+        <module>auth-server</module>
         <module>backend-core</module>
         <module>banco-batch</module>
         <module>bff-web</module>
         <module>bff-mobile</module>
         <module>bff-atm</module>
+        <module>notificaciones-service</module>
     </modules>
 
     <properties>
