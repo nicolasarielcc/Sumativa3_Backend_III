@@ -69,6 +69,7 @@ El sistema evoluciona la arquitectura BFF de la Semana 6 añadiendo los componen
 - Emite **access tokens JWT firmados con clave RSA** y expone los endpoints `/.well-known/openid-configuration`, `/oauth2/jwks` y `/oauth2/token`.
 - Registra **un cliente por canal** (`client_credentials`): `bff-web-client`, `bff-mobile-client`, `bff-atm-client`.
 - El token incluye los claims `authorities` (rol del canal) y `channel`, que los resource servers usan para autorizar.
+- **Productor Kafka**: publica un `AuthEvent {cliente, canal, fecha}` en el topic `autenticaciones` cada vez que emite un token (evidencia de la mensajería asíncrona en el flujo de autenticación).
 
 ### `common` (librería compartida)
 - `OAuth2TokenClient`: cliente OAuth 2.0 que obtiene el token (HTTP Basic + `client_credentials`).
@@ -145,9 +146,17 @@ Configuración en `application.properties` (`resilience4j.circuitbreaker.instanc
 
 ## 5. Mensajería asíncrona (Kafka)
 
-- **Productor**: `backend-core` publica el evento `RetiroEvent {cuentaId, monto, estado, fecha}` en el topic `retiros` tras cada retiro aprobado.
+El sistema tiene **dos tópicos**:
+
+| Tópico | Productor | Evento | Cuándo |
+|---|---|---|---|
+| `autenticaciones` | `auth-server` | `AuthEvent {cliente, canal, fecha}` | Cada login / emisión de token |
+| `retiros` | `backend-core` | `RetiroEvent {cuentaId, monto, estado, fecha}` | Cada retiro aprobado |
+
+- **Productor (retiros)**: `backend-core` publica `RetiroEvent` en el topic `retiros` tras cada retiro aprobado.
+- **Productor (auth)**: `auth-server` publica `AuthEvent` en el topic `autenticaciones` cada vez que emite un token.
 - **Consumidor**: `notificaciones-service` consume el topic `retiros` (ack manual, `earliest`) y expone `GET /api/notificaciones` con los eventos recibidos.
-- **Broker**: Kafka + Zookeeper (imágenes Confluent) orquestados en el `docker-compose.yml`.
+- **Broker**: Kafka + Zookeeper (imágenes Confluent) orquestados en el `docker-compose.yml`; `kafka-ui` disponible en `http://localhost:8090`.
 
 ---
 
@@ -167,7 +176,7 @@ S3_Bank_BFF/
 ├── bff-atm/                    # BFF canal Cajeros Automáticos
 ├── notificaciones-service/     # Consumidor Kafka de eventos de retiro
 ├── postman/                    # Colección Postman para pruebas
-├── imgs/                       # Evidencias de ejecución (informe)
+├── imgs2/                      # Evidencias de ejecución (informe)
 └── scripts/
     ├── deploy.sh               # Despliegue completo con Docker
     ├── evidencia.sh            # Generación de evidencia por línea de comandos
@@ -238,53 +247,101 @@ La colección está en `postman/Banco_XYZ_BFF.postman_collection.json`.
 1. **Importar** la colección en Postman.
 2. **Desactivar SSL** (servicios HTTPS con certificado autofirmado): *Settings → General → SSL certificate verification → OFF*.
 3. **Orden de prueba**:
-   - `0 - Batch` → dispara la carga de datos.
-   - `1 - Auth` → ejecutar los **3 login** (obtienen el token OAuth 2.0 por canal).
-   - `2 - Backend Core`, `3 - BFF Web`, `4 - BFF Mobile`, `5 - BFF ATM`.
-   - `6 - Notificaciones` → listar los eventos de retiro consumidos desde Kafka.
+   - `0 - Authorization Server` → token por canal (client_credentials), JWK Set y OpenID Configuration.
+   - `1 - Batch` → dispara la carga de datos.
+   - `2 - Auth` → ejecutar los **3 login** (obtienen el token OAuth 2.0 por canal).
+   - `3 - Backend Core`, `4 - BFF Web`, `5 - BFF Mobile`, `6 - BFF ATM`.
+   - `7 - Notificaciones` → listar los eventos de retiro consumidos desde Kafka.
+   - `8 - Verificación de seguridad` → comprobar 401 (sin token) y 403 (token cruzado).
 
 ---
 
 ## 10. Informe con la evidencia del proceso corriendo
 
-A continuación se muestran las evidencias de la ejecución del sistema (capturas en la carpeta [`imgs/`](imgs/)).
+A continuación se muestran las evidencias de la ejecución del sistema (capturas en la carpeta [`imgs2/`](imgs2/)).
 
 ### 10.1 Contenedores corriendo
 
-El stack completo levantado con `docker compose up -d --build` (MySQL, Kafka, Authorization Server, batch, backend-core, los 3 BFFs y notificaciones).
+El stack completo levantado con `docker compose up -d --build` (MySQL, Kafka + Zookeeper, Kafka UI, Authorization Server, batch, backend-core, los 3 BFFs y notificaciones).
 
-![Contenedores corriendo](imgs/contenedores.png)
+![Contenedores corriendo](imgs2/docker%20compose%20ps.png)
 
-### 10.2 Autenticación por canal (OAuth 2.0)
+### 10.2 Logs de los microservicios
 
-Cada BFF obtiene su access token desde el Authorization Server.
+Arranque del **Authorization Server** (OAuth 2.0):
 
-![Login canal Web](imgs/loginWEB.png)
+![Logs auth-server](imgs2/logs%20banco-bff-auth-server.png)
 
-![Login canal Mobile](imgs/loginMOBILE.png)
+Carga de datos del **proceso batch** (estado `COMPLETED`):
 
-![Login canal ATM](imgs/loginATM.png)
+![Logs batch](imgs2/docker%20logs%20banco-bff-batch.png)
 
-### 10.3 Carga de datos (Spring Batch)
+Arranque de **backend-core**:
 
-![Carga de datos batch](imgs/postman-batch.png)
+![Logs backend-core](imgs2/docker%20logs%20banco-bff-core.png)
 
-### 10.4 Backend Core
+Arranque del **BFF ATM**:
 
-![Backend Core - listar cuentas](imgs/BackendCoreListar.png)
+![Logs BFF ATM](imgs2/docker%20logs%20banco-bff-atm.png)
 
-### 10.5 BFF Web
+**notificaciones-service** consumiendo un evento de retiro desde Kafka:
 
-![Web - listar cuentas](imgs/WebListarCuentas.png)
+![Logs notificaciones](imgs2/docker%20logs%20banco-bff-notificaciones.png)
 
-![Web - detalle de cuenta](imgs/WebDetalleCuenta.png)
+### 10.3 Autenticación OAuth 2.0 (token por canal)
 
-### 10.6 BFF Mobile
+Obtención del access token desde el Authorization Server (`client_credentials`) para cada canal:
 
-![Mobile - listar cuentas](imgs/MobileListarCuentas.png)
+![Token canal Web](imgs2/postman%20token%20web.png)
 
-### 10.7 BFF ATM
+![Token canal Mobile](imgs2/postman%20token%20mobile.png)
 
-![ATM - consulta de saldo](imgs/ATMConsultaSaldo.png)
+![Token canal ATM](imgs2/postman%20token%20ATM.png)
 
-![ATM - retiro](imgs/ATMRetiro.png)
+Login de cada BFF (delegado al Authorization Server):
+
+![Login canal Web](imgs2/postman%20login%20web.png)
+
+![Login canal Mobile](imgs2/postman%20login%20mobile.png)
+
+![Login canal ATM](imgs2/postman%20login%20atm.png)
+
+### 10.4 Consumo de los endpoints (Backend Core + BFFs)
+
+Listado de cuentas y respuestas de los canales:
+
+![Listado de cuentas (Postman)](imgs2/listado-casicompleto-postman.png)
+
+Resumen de resultados de la colección:
+
+![Resumen de pruebas OK](imgs2/postman-resumen-OK.png)
+
+![Cabecera del resumen OK](imgs2/postman-cabecera-resumen-ok.png)
+
+### 10.5 Verificación de seguridad (401 / 403)
+
+Protección de datos y servicios: accesos denegados con token ausente o de otro canal.
+
+![Accesos denegados (401/403)](imgs2/postman-accesos-denegados.png)
+
+### 10.6 Mensajería asíncrona (Kafka)
+
+Consola de Kafka (listar/describir tópicos y consumir mensajes):
+
+![Consola Kafka](imgs2/consola-kafka.png)
+
+Kafka UI — vista inicial del clúster:
+
+![Kafka UI inicio](imgs2/UI-kafka-inicio.png)
+
+Kafka UI — tópicos (`autenticaciones` y `retiros`):
+
+![Kafka UI tópicos](imgs2/UI-kafka-topic2.png)
+
+Kafka UI — mensajes de un tópico (ejemplo 1):
+
+![Kafka UI mensajes](imgs2/UI-kafka-mensajesejemplo.png)
+
+Kafka UI — mensajes de un tópico (ejemplo 2):
+
+![Kafka UI mensajes 2](imgs2/UI-kafka-mensajeejemplo2.png)

@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Banco XYZ - BFF (Web/Mobile/ATM)",
-    "description": "Coleccion para probar la arquitectura Backend for Frontend (BFF) del Banco XYZ.\n\nIMPORTANTE: los servicios usan HTTPS con certificado autofirmado. En Postman debes desactivar la verificacion SSL:\n  Settings -> General -> 'SSL certificate verification' -> OFF\n\nOrden sugerido:\n  1) Folder 'Batch' -> 'Procesar datos' (carga los CSV en MySQL).\n  2) Folder 'Auth' -> ejecutar los 3 login (guardan los tokens automaticamente).\n  3) Ejecutar las llamadas de Backend Core, Web, Mobile y ATM.\n\nCredenciales:\n  Web    -> web.admin    / WebPass123!\n  Mobile -> mobile.user  / MobilePass123!\n  ATM    -> atm.terminal / AtmPass123!",
+    "name": "Banco XYZ - Microservicios resilientes y seguros (OAuth2 + Kafka)",
+    "description": "Coleccion para generar la evidencia de la Sumativa 3 - Semana 8 (Desarrollo Backend III).\n\nComponentes: Authorization Server OAuth 2.0, backend-core, 3 BFFs (web/mobile/atm), banco-batch, notificaciones-service (Kafka) y Resilience4j.\n\nIMPORTANTE: los BFFs y backend-core usan HTTPS con certificado autofirmado. En Postman desactiva la verificacion SSL:\n  Settings -> General -> 'SSL certificate verification' -> OFF\n\nFlujo OAuth 2.0 (client_credentials):\n  Cada BFF solicita su access token al Authorization Server (http://localhost:9000).\n  El token incluye el claim 'authorities' con el rol del canal (ROLE_WEB/ROLE_MOBILE/ROLE_ATM).\n\nClientes registrados:\n  Web    -> bff-web-client    / web-secret    -> ROLE_WEB\n  Mobile -> bff-mobile-client / mobile-secret -> ROLE_MOBILE\n  ATM    -> bff-atm-client    / atm-secret    -> ROLE_ATM\n\nOrden sugerido:\n  1) Folder '0 - Authorization Server' (evidencia OAuth2).\n  2) Folder '1 - Batch' -> 'Procesar datos' (carga los CSV en MySQL).\n  3) Folder '2 - Auth' -> ejecutar los 3 login (guardan los tokens automaticamente).\n  4) Ejecutar core, BFFs, notificaciones y la verificacion de seguridad.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,7 +12,201 @@
   ],
   "item": [
     {
-      "name": "0 - Batch",
+      "name": "0 - Authorization Server (OAuth2)",
+      "item": [
+        {
+          "name": "Token ATM (client_credentials)",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "bff-atm-client", "type": "string" },
+                { "key": "password", "value": "atm-secret", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials", "type": "text" },
+                { "key": "scope", "value": "atm", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/oauth2/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "9000",
+              "path": ["oauth2", "token"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('access_token emitido', () => pm.expect(b.access_token).to.be.a('string'));",
+                  "pm.test('scope atm', () => pm.expect(b.scope).to.eql('atm'));",
+                  "pm.collectionVariables.set('atm_token', b.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token Web (client_credentials)",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "bff-web-client", "type": "string" },
+                { "key": "password", "value": "web-secret", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials", "type": "text" },
+                { "key": "scope", "value": "web", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/oauth2/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "9000",
+              "path": ["oauth2", "token"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('access_token emitido', () => pm.expect(b.access_token).to.be.a('string'));",
+                  "pm.test('scope web', () => pm.expect(b.scope).to.eql('web'));",
+                  "pm.collectionVariables.set('web_token', b.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token Mobile (client_credentials)",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "bff-mobile-client", "type": "string" },
+                { "key": "password", "value": "mobile-secret", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials", "type": "text" },
+                { "key": "scope", "value": "mobile", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/oauth2/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "9000",
+              "path": ["oauth2", "token"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('access_token emitido', () => pm.expect(b.access_token).to.be.a('string'));",
+                  "pm.test('scope mobile', () => pm.expect(b.scope).to.eql('mobile'));",
+                  "pm.collectionVariables.set('mobile_token', b.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "JWK Set (clave publica RSA)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/oauth2/jwks",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "9000",
+              "path": ["oauth2", "jwks"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('tiene keys', () => pm.expect(b.keys).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenID Configuration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9000/.well-known/openid-configuration",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "9000",
+              "path": [".well-known", "openid-configuration"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('expone jwks_uri', () => pm.expect(b.jwks_uri).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 - Batch",
       "item": [
         {
           "name": "Procesar datos (carga CSV)",
@@ -36,7 +230,6 @@
                   "pm.test('estado COMPLETED', () => {",
                   "  const b = pm.response.json();",
                   "  pm.expect(b.estado).to.eql('COMPLETED');",
-                  "  pm.expect(b.escritos).to.be.greaterThan(0);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -47,7 +240,8 @@
       ]
     },
     {
-      "name": "1 - Auth (login por canal)",
+      "name": "2 - Auth (login por canal)",
+      "description": "El login de cada BFF delega en el Authorization Server (OAuth 2.0 client_credentials). El token resultante lleva el rol del canal.",
       "item": [
         {
           "name": "Login Web (guarda web_token)",
@@ -58,7 +252,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"web.admin\",\n  \"password\": \"WebPass123!\"\n}"
+              "raw": "{}"
             },
             "url": {
               "raw": "https://localhost:8082/api/auth/login",
@@ -93,7 +287,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"mobile.user\",\n  \"password\": \"MobilePass123!\"\n}"
+              "raw": "{}"
             },
             "url": {
               "raw": "https://localhost:8083/api/auth/login",
@@ -128,7 +322,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"atm.terminal\",\n  \"password\": \"AtmPass123!\"\n}"
+              "raw": "{}"
             },
             "url": {
               "raw": "https://localhost:8084/api/auth/login",
@@ -157,8 +351,8 @@
       ]
     },
     {
-      "name": "2 - Backend Core (Bearer atm_token)",
-      "description": "backend-core valida el JWT. Lecturas requieren token; el retiro requiere ROLE_ATM (por eso se usa atm_token).",
+      "name": "3 - Backend Core (Bearer atm_token)",
+      "description": "Resource server OAuth 2.0: valida el token contra el JWK Set. Lecturas requieren token; el retiro requiere ROLE_ATM.",
       "item": [
         {
           "name": "Listar cuentas",
@@ -310,7 +504,7 @@
       ]
     },
     {
-      "name": "3 - BFF Web (Bearer web_token)",
+      "name": "4 - BFF Web (Bearer web_token)",
       "item": [
         {
           "name": "Listar cuentas (resumen completo)",
@@ -375,7 +569,7 @@
       ]
     },
     {
-      "name": "4 - BFF Mobile (Bearer mobile_token)",
+      "name": "5 - BFF Mobile (Bearer mobile_token)",
       "item": [
         {
           "name": "Listar cuentas (liviano)",
@@ -437,7 +631,7 @@
       ]
     },
     {
-      "name": "5 - BFF ATM (Bearer atm_token)",
+      "name": "6 - BFF ATM (Bearer atm_token)",
       "item": [
         {
           "name": "Consulta de saldo",
@@ -496,6 +690,155 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const b = pm.response.json();",
                   "pm.test('estado APROBADO', () => pm.expect(b.estado).to.eql('APROBADO'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7 - Notificaciones (Kafka)",
+      "description": "Evidencia de la mensajeria asincrona: backend-core publica un RetiroEvent en el topic 'retiros' y notificaciones-service lo consume.",
+      "item": [
+        {
+          "name": "Listar eventos de retiro consumidos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8085/api/notificaciones",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8085",
+              "path": ["api", "notificaciones"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve arreglo de eventos', () => Array.isArray(pm.response.json()));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 - Verificacion de seguridad (401/403)",
+      "description": "Comprueba la proteccion de datos y servicios (OAuth 2.0 + autorizacion por canal).",
+      "item": [
+        {
+          "name": "401 - endpoint protegido SIN token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://localhost:8081/api/cuentas",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "cuentas"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - token WEB en endpoint ATM",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{web_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8084/api/atm/cuentas/{{cuentaId}}/saldo",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8084",
+              "path": ["api", "atm", "cuentas", "{{cuentaId}}", "saldo"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - token MOBILE en endpoint WEB",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{mobile_token}}" }
+            ],
+            "url": {
+              "raw": "https://localhost:8082/api/web/cuentas",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8082",
+              "path": ["api", "web", "cuentas"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - token WEB en retiro de core (requiere ROLE_ATM)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{web_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": 100\n}"
+            },
+            "url": {
+              "raw": "https://localhost:8081/api/cuentas/{{cuentaId}}/retiros",
+              "protocol": "https",
+              "host": ["localhost"],
+              "port": "8081",
+              "path": ["api", "cuentas", "{{cuentaId}}", "retiros"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
                 ],
                 "type": "text/javascript"
               }

@@ -130,7 +130,8 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
+    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer(
+            org.springframework.kafka.core.KafkaTemplate<String, cl.duoc.banco.bff.authserver.dto.AuthEvent> kafkaTemplate) {
         return context -> {
             if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
                 Set<String> scopes = context.getAuthorizedScopes();
@@ -138,7 +139,30 @@ public class AuthorizationServerConfig {
                 String channel = scope.toUpperCase();
                 context.getClaims().claim("channel", channel);
                 context.getClaims().claim("authorities", List.of("ROLE_" + channel));
+
+                String clientId = context.getRegisteredClient() != null
+                        ? context.getRegisteredClient().getClientId()
+                        : "desconocido";
+                publicarEventoAutenticacion(kafkaTemplate, clientId, channel);
             }
         };
+    }
+
+    private void publicarEventoAutenticacion(
+            org.springframework.kafka.core.KafkaTemplate<String, cl.duoc.banco.bff.authserver.dto.AuthEvent> kafkaTemplate,
+            String clientId, String channel) {
+        try {
+            cl.duoc.banco.bff.authserver.dto.AuthEvent evento =
+                    new cl.duoc.banco.bff.authserver.dto.AuthEvent(
+                            clientId, channel, java.time.Instant.now().toString());
+            kafkaTemplate.send(KafkaProducerConfig.TOPIC, evento)
+                    .whenComplete((r, ex) -> {
+                        if (ex != null) {
+                            System.err.println("No se pudo publicar el evento de autenticacion: " + ex.getMessage());
+                        }
+                    });
+        } catch (Exception e) {
+            System.err.println("Error al publicar evento de autenticacion: " + e.getMessage());
+        }
     }
 }
