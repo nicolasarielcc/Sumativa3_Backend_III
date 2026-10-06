@@ -345,3 +345,9 @@ Kafka UI — mensajes de un tópico (ejemplo 1):
 Kafka UI — mensajes de un tópico (ejemplo 2):
 
 ![Kafka UI mensajes 2](imgs2/UI-kafka-mensajeejemplo2.png)
+
+### 10.7 Despliegue en la nube (pendiente por laboratorio)
+
+El despliegue en la nube **no pudo realizarse** por problemas de acceso al laboratorio cloud. Todo el sistema fue desplegado y verificado **en local** con Docker Compose. La siguiente captura evidencia el error de acceso al entorno cloud:
+
+![Error de acceso al laboratorio cloud](imgs2/Academy-lab-error.png)
